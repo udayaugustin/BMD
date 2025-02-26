@@ -6,13 +6,14 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import BookAppointment from "@/pages/book-appointment";
 import AuthPage from "@/pages/auth";
+import { ProtectedRoute } from "./lib/protected-route";
 
 function Router() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
-      <Route path="/" component={Home} />
-      <Route path="/book/:id" component={BookAppointment} />
+      <ProtectedRoute path="/" component={Home} />
+      <ProtectedRoute path="/book/:id" component={BookAppointment} />
       <Route component={NotFound} />
     </Switch>
   );
