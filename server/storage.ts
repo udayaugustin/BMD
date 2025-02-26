@@ -1,56 +1,49 @@
 import { IStorage } from "./types";
 import type { User, InsertUser, Clinic, Doctor, Appointment } from "@shared/schema";
+import { users, clinics, doctors, appointments } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import connectPg from "connect-pg-simple";
+import { pool } from "./db";
 
-const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
 
 // Helper function to calculate distance between two points using Haversine formula
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371; // Earth's radius in km
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private clinics: Map<number, Clinic>;
-  private doctors: Map<number, Doctor>;
-  private appointments: Map<number, Appointment>;
+export class DatabaseStorage implements IStorage {
   sessionStore: session.Store;
-  currentId: number;
 
   constructor() {
-    this.users = new Map();
-    this.clinics = new Map();
-    this.doctors = new Map();
-    this.appointments = new Map();
-    this.currentId = 1;
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000,
+    this.sessionStore = new PostgresSessionStore({
+      pool,
+      createTableIfMissing: true,
     });
   }
 
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    const id = this.currentId++;
-    const newUser = { ...user, id };
-    this.users.set(id, newUser);
+    const [newUser] = await db.insert(users).values(user).returning();
     return newUser;
   }
 
@@ -60,14 +53,16 @@ export class MemStorage implements IStorage {
     maxDistance?: number;
     specialty?: string;
   }): Promise<(Doctor & { distance: number; clinicName: string })[]> {
-    const doctors = Array.from(this.doctors.values());
-    const clinics = Array.from(this.clinics.values());
+    const doctorsWithClinics = await db
+      .select({
+        doctor: doctors,
+        clinic: clinics,
+      })
+      .from(doctors)
+      .innerJoin(clinics, eq(doctors.clinicId, clinics.id));
 
-    return doctors
-      .map(doctor => {
-        const clinic = clinics.find(c => c.id === doctor.clinicId);
-        if (!clinic) return null;
-
+    return doctorsWithClinics
+      .map(({ doctor, clinic }) => {
         const distance = params.latitude && params.longitude
           ? calculateDistance(
               params.latitude,
@@ -83,8 +78,7 @@ export class MemStorage implements IStorage {
           clinicName: clinic.name,
         };
       })
-      .filter((item): item is NonNullable<typeof item> => {
-        if (!item) return false;
+      .filter((item) => {
         if (params.maxDistance && item.distance > params.maxDistance) return false;
         if (params.specialty && item.specialty !== params.specialty) return false;
         return true;
@@ -93,41 +87,48 @@ export class MemStorage implements IStorage {
   }
 
   async getDoctors(clinicId?: number): Promise<Doctor[]> {
-    const doctors = Array.from(this.doctors.values());
-    return clinicId 
-      ? doctors.filter(d => d.clinicId === clinicId)
-      : doctors;
+    if (clinicId) {
+      return await db.select().from(doctors).where(eq(doctors.clinicId, clinicId));
+    }
+    return await db.select().from(doctors);
   }
 
   async updateDoctorStatus(id: number, isAvailable: boolean, hasArrived: boolean): Promise<Doctor> {
-    const doctor = this.doctors.get(id);
-    if (!doctor) throw new Error("Doctor not found");
+    const [doctor] = await db
+      .update(doctors)
+      .set({ isAvailable, hasArrived })
+      .where(eq(doctors.id, id))
+      .returning();
 
-    const updated = { ...doctor, isAvailable, hasArrived };
-    this.doctors.set(id, updated);
-    return updated;
+    if (!doctor) throw new Error("Doctor not found");
+    return doctor;
   }
 
   async getAppointments(userId: number): Promise<Appointment[]> {
-    return Array.from(this.appointments.values())
-      .filter(a => a.patientId === userId);
+    return await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.patientId, userId));
   }
 
   async createAppointment(appointment: Omit<Appointment, "id">): Promise<Appointment> {
-    const id = this.currentId++;
-    const newAppointment = { ...appointment, id };
-    this.appointments.set(id, newAppointment);
+    const [newAppointment] = await db
+      .insert(appointments)
+      .values(appointment)
+      .returning();
     return newAppointment;
   }
 
   async updateAppointmentStatus(id: number, status: Appointment["status"]): Promise<Appointment> {
-    const appointment = this.appointments.get(id);
-    if (!appointment) throw new Error("Appointment not found");
+    const [appointment] = await db
+      .update(appointments)
+      .set({ status })
+      .where(eq(appointments.id, id))
+      .returning();
 
-    const updated = { ...appointment, status };
-    this.appointments.set(id, updated);
-    return updated;
+    if (!appointment) throw new Error("Appointment not found");
+    return appointment;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
