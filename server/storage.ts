@@ -108,9 +108,10 @@ export class MemStorage implements IStorage {
   }
 
   async getUserByMobileNumber(mobileNumber: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
+    const user = Array.from(this.users.values()).find(
       user => user.mobileNumber === mobileNumber
     );
+    return user;
   }
 }
 
