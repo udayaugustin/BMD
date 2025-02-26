@@ -5,10 +5,12 @@ import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import BookAppointment from "@/pages/book-appointment";
+import AuthPage from "@/pages/auth";
 
 function Router() {
   return (
     <Switch>
+      <Route path="/auth" component={AuthPage} />
       <Route path="/" component={Home} />
       <Route path="/book/:id" component={BookAppointment} />
       <Route component={NotFound} />

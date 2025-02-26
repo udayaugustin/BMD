@@ -2,6 +2,21 @@ import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  mobileNumber: text("mobile_number").notNull().unique(),
+  password: text("password").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const otps = pgTable("otps", {
+  id: serial("id").primaryKey(),
+  mobileNumber: text("mobile_number").notNull(),
+  otp: text("otp").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  verified: boolean("verified").default(false).notNull(),
+});
+
 export const doctors = pgTable("doctors", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -18,6 +33,26 @@ export const appointments = pgTable("appointments", {
   doctorId: integer("doctor_id").notNull(),
   tokenNumber: integer("token_number").notNull(),
   appointmentDate: timestamp("appointment_date").notNull(),
+});
+
+export const insertUserSchema = createInsertSchema(users).pick({
+  mobileNumber: true,
+  password: true,
+}).extend({
+  mobileNumber: z.string().regex(/^\d{10}$/, "Please enter a valid 10-digit mobile number"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+export const loginSchema = insertUserSchema;
+
+export const verifyOtpSchema = z.object({
+  mobileNumber: z.string().regex(/^\d{10}$/, "Please enter a valid 10-digit mobile number"),
+  otp: z.string().length(6, "OTP must be 6 digits"),
+});
+
+export const insertOtpSchema = createInsertSchema(otps).pick({
+  mobileNumber: true,
+  otp: true,
 });
 
 export const insertDoctorSchema = createInsertSchema(doctors).pick({
@@ -37,6 +72,10 @@ export const insertAppointmentSchema = createInsertSchema(appointments).pick({
   phoneNumber: z.string().regex(/^\d{10}$/, "Please enter a valid 10-digit phone number"),
 });
 
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Otp = typeof otps.$inferSelect;
+export type InsertOtp = z.infer<typeof insertOtpSchema>;
 export type Doctor = typeof doctors.$inferSelect;
 export type InsertDoctor = z.infer<typeof insertDoctorSchema>;
 export type Appointment = typeof appointments.$inferSelect;

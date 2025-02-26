@@ -1,4 +1,8 @@
-import { Doctor, InsertDoctor, Appointment, InsertAppointment, mockDoctors } from "@shared/schema";
+import { User, InsertUser, Doctor, InsertDoctor, Appointment, InsertAppointment, mockDoctors } from "@shared/schema";
+import session from "express-session";
+import createMemoryStore from "memorystore";
+
+const MemoryStore = createMemoryStore(session);
 
 export interface IStorage {
   getDoctors(): Promise<Doctor[]>;
@@ -6,20 +10,33 @@ export interface IStorage {
   searchDoctors(query: string): Promise<Doctor[]>;
   createAppointment(appointment: InsertAppointment): Promise<Appointment>;
   getLatestTokenNumber(doctorId: number, date: Date): Promise<number>;
+
+  // Auth related methods
+  createUser(user: InsertUser): Promise<User>;
+  getUserByMobileNumber(mobileNumber: string): Promise<User | undefined>;
+  sessionStore: session.Store;
 }
 
 export class MemStorage implements IStorage {
   private doctors: Map<number, Doctor>;
   private appointments: Map<number, Appointment>;
+  private users: Map<number, User>;
   private currentDoctorId: number;
   private currentAppointmentId: number;
+  private currentUserId: number;
+  sessionStore: session.Store;
 
   constructor() {
     this.doctors = new Map();
     this.appointments = new Map();
+    this.users = new Map();
     this.currentDoctorId = 1;
     this.currentAppointmentId = 1;
-    
+    this.currentUserId = 1;
+    this.sessionStore = new MemoryStore({
+      checkPeriod: 86400000 // prune expired entries every 24h
+    });
+
     // Initialize with mock doctors
     mockDoctors.forEach(doctor => {
       const id = this.currentDoctorId++;
@@ -64,7 +81,7 @@ export class MemStorage implements IStorage {
   async getLatestTokenNumber(doctorId: number, date: Date): Promise<number> {
     const todayStart = new Date(date);
     todayStart.setHours(0, 0, 0, 0);
-    
+
     const todayEnd = new Date(date);
     todayEnd.setHours(23, 59, 59, 999);
 
@@ -76,8 +93,24 @@ export class MemStorage implements IStorage {
     );
 
     if (doctorAppointments.length === 0) return 0;
-    
+
     return Math.max(...doctorAppointments.map(app => app.tokenNumber));
+  }
+
+  async createUser(userData: InsertUser): Promise<User> {
+    const user: User = {
+      id: this.currentUserId++,
+      createdAt: new Date(),
+      ...userData,
+    };
+    this.users.set(user.id, user);
+    return user;
+  }
+
+  async getUserByMobileNumber(mobileNumber: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      user => user.mobileNumber === mobileNumber
+    );
   }
 }
 
