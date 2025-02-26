@@ -180,11 +180,23 @@ export class DatabaseStorage implements IStorage {
       throw new Error("No consulting hours found for this doctor");
     }
 
-    // Format appointment time to HH:mm for comparison
-    const timeStr = appointmentDate.toTimeString().slice(0, 5);
+    // Format appointment time to HH:mm:ss for comparison
+    const timeStr = appointmentDate.toTimeString().slice(0, 8);
 
-    if (timeStr < consultingHour.startTime || timeStr > consultingHour.endTime) {
-      throw new Error(`Appointment time must be between ${consultingHour.startTime} and ${consultingHour.endTime}`);
+    // Parse times into minutes for easier comparison
+    const getMinutes = (timeStr: string) => {
+      const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+      return hours * 60 + minutes + seconds / 60;
+    };
+
+    const appointmentMinutes = getMinutes(timeStr);
+    const startMinutes = getMinutes(consultingHour.startTime);
+    const endMinutes = getMinutes(consultingHour.endTime);
+
+    if (appointmentMinutes < startMinutes || appointmentMinutes > endMinutes) {
+      const formattedStart = consultingHour.startTime.slice(0, 5);
+      const formattedEnd = consultingHour.endTime.slice(0, 5);
+      throw new Error(`Appointment time must be between ${formattedStart} and ${formattedEnd}`);
     }
 
     // Check if we haven't exceeded max patients for the day
