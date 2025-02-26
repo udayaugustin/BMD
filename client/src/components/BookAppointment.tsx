@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -41,10 +41,15 @@ export function BookAppointment({ doctorId }: { doctorId: number }) {
   // Book appointment mutation
   const bookAppointmentMutation = useMutation({
     mutationFn: async (doctorClinicId: number) => {
+      // Get next token number based on current token
+      const currentClinic = clinics?.find(c => c.id === doctorClinicId);
+      const nextToken = (currentClinic?.currentToken || 0) + 1;
+
       const appointmentTime = new Date();
       const res = await apiRequest("POST", "/api/appointments", {
         doctorClinicId,
-        appointmentTime: appointmentTime.toISOString(),
+        appointmentTime: appointmentTime.toISOString(), // Properly format date
+        tokenNumber: nextToken,
       });
       return await res.json();
     },
@@ -133,10 +138,8 @@ export function BookAppointment({ doctorId }: { doctorId: number }) {
 
       {selectedClinicId && (
         <Card>
-          <CardHeader>
-            <CardTitle>Available Time Slots</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="p-4">
+            <h3 className="text-lg font-medium mb-4">Available Time Slots</h3>
             {isLoadingHours ? (
               <div className="flex justify-center p-4">
                 <Loader2 className="h-6 w-6 animate-spin" />
