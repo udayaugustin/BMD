@@ -164,48 +164,44 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Check if the time slot is within consulting hours
-    const appointmentDate = new Date(appointment.appointmentTime);
+    const appointmentDate = typeof appointment.appointmentTime === 'string'
+      ? new Date(appointment.appointmentTime)
+      : appointment.appointmentTime;
+
     const dayOfWeek = appointmentDate.getDay();
 
+    // Get consulting hours for the doctor on this day
     const [consultingHour] = await db
       .select()
       .from(consultingHours)
-      .where(and(
-        eq(consultingHours.doctorClinicId, appointment.doctorClinicId),
-        eq(consultingHours.dayOfWeek, dayOfWeek)
-      ));
+      .where(eq(consultingHours.doctorClinicId, appointment.doctorClinicId));
 
     if (!consultingHour) {
-      throw new Error("Doctor is not available on this day");
+      throw new Error("No consulting hours found for this doctor");
     }
 
-    // Check if the appointment time is within consulting hours
-    const appointmentTimeOnly = appointment.appointmentTime.split('T')[1].substring(0, 5);
-    if (appointmentTimeOnly < consultingHour.startTime || appointmentTimeOnly > consultingHour.endTime) {
-      throw new Error("Appointment time is outside consulting hours");
+    // Format appointment time to HH:mm for comparison
+    const timeStr = appointmentDate.toTimeString().slice(0, 5);
+
+    if (timeStr < consultingHour.startTime || timeStr > consultingHour.endTime) {
+      throw new Error(`Appointment time must be between ${consultingHour.startTime} and ${consultingHour.endTime}`);
     }
 
     // Check if we haven't exceeded max patients for the day
     const existingAppointments = await db
       .select()
       .from(appointments)
-      .where(and(
-        eq(appointments.doctorClinicId, appointment.doctorClinicId),
-        eq(appointments.appointmentTime, appointment.appointmentTime)
-      ));
+      .where(eq(appointments.doctorClinicId, appointment.doctorClinicId));
 
     if (existingAppointments.length >= consultingHour.maxPatients) {
-      throw new Error("No more appointments available for this time slot");
+      throw new Error("No more appointments available for this doctor today");
     }
 
     // Generate token number (current max token + 1)
     const [maxToken] = await db
       .select({ max: sql<number>`MAX(token_number)` })
       .from(appointments)
-      .where(and(
-        eq(appointments.doctorClinicId, appointment.doctorClinicId),
-        eq(appointments.appointmentTime, appointment.appointmentTime)
-      ));
+      .where(eq(appointments.doctorClinicId, appointment.doctorClinicId));
 
     const tokenNumber = (maxToken?.max || 0) + 1;
 
