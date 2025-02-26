@@ -21,7 +21,7 @@ type SearchResult = {
 export function DoctorSearch() {
   const { toast } = useToast();
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [specialty, setSpecialty] = useState<string>("");
+  const [specialty, setSpecialty] = useState<string>("all");
   const [maxDistance, setMaxDistance] = useState<number>(10);
 
   const { data: doctors, isLoading } = useQuery<SearchResult[]>({
@@ -31,7 +31,7 @@ export function DoctorSearch() {
         latitude: location?.lat,
         longitude: location?.lng,
         maxDistance,
-        specialty: specialty || undefined,
+        specialty: specialty === "all" ? undefined : specialty,
       },
     ],
     enabled: !!location,
@@ -88,7 +88,7 @@ export function DoctorSearch() {
               <SelectValue placeholder="Select specialty" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Specialties</SelectItem>
+              <SelectItem value="all">All Specialties</SelectItem>
               <SelectItem value="General Medicine">General Medicine</SelectItem>
               <SelectItem value="Pediatrics">Pediatrics</SelectItem>
               <SelectItem value="Cardiology">Cardiology</SelectItem>
