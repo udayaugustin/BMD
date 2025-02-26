@@ -143,7 +143,7 @@ export class DatabaseStorage implements IStorage {
       ...appointment,
       doctorName: doctor.name,
       clinicName: clinic.name,
-      currentToken: doctorClinic.currentToken,
+      currentToken: doctorClinic.currentToken ?? 0, // Default to 0 if null
     }));
   }
 
@@ -200,7 +200,7 @@ export class DatabaseStorage implements IStorage {
           clinicName: clinic.name,
           isAvailable: doctorClinic.isAvailable,
           hasArrived: doctorClinic.hasArrived,
-          currentToken: doctorClinic.currentToken,
+          currentToken: doctorClinic.currentToken ?? 0, // Default to 0 if null
         };
       })
       .filter(item => !params.maxDistance || item.distance <= params.maxDistance)
