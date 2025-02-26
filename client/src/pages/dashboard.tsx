@@ -5,11 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Search } from "lucide-react";
 import { DoctorSearch } from "@/components/DoctorSearch";
+import { BookAppointment } from "@/components/BookAppointment";
 import { useState } from "react";
 
 export default function Dashboard() {
   const { user, logoutMutation } = useAuth();
   const [showSearch, setShowSearch] = useState(false);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<number | null>(null);
 
   const { data: appointments, isLoading: isLoadingAppointments } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
@@ -48,7 +50,10 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <Button
-            onClick={() => setShowSearch(!showSearch)}
+            onClick={() => {
+              setShowSearch(!showSearch);
+              setSelectedDoctorId(null);
+            }}
             className="w-full md:w-auto"
           >
             <Search className="w-4 h-4 mr-2" />
@@ -61,7 +66,18 @@ export default function Dashboard() {
                 <CardTitle>Search Doctors</CardTitle>
               </CardHeader>
               <CardContent>
-                <DoctorSearch />
+                <DoctorSearch onDoctorSelect={setSelectedDoctorId} />
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedDoctorId && (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle>Book Appointment</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <BookAppointment doctorId={selectedDoctorId} />
               </CardContent>
             </Card>
           )}
@@ -123,20 +139,12 @@ export default function Dashboard() {
                       <p className="font-medium">{doctor.name}</p>
                       <p className="text-sm text-gray-500">{doctor.specialty}</p>
                     </div>
-                    <div className="flex flex-col items-end">
-                      <span
-                        className={`px-2 py-1 rounded-full text-sm ${
-                          doctor.isAvailable
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {doctor.isAvailable ? "Available" : "Unavailable"}
-                      </span>
-                      {doctor.hasArrived && (
-                        <span className="text-sm text-green-600 mt-1">Doctor has arrived</span>
-                      )}
-                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => setSelectedDoctorId(doctor.id)}
+                    >
+                      Book Appointment
+                    </Button>
                   </div>
                 ))}
               </div>

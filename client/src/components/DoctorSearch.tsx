@@ -18,7 +18,11 @@ type SearchResult = {
   clinicName: string;
 };
 
-export function DoctorSearch() {
+type Props = {
+  onDoctorSelect?: (doctorId: number) => void;
+};
+
+export function DoctorSearch({ onDoctorSelect }: Props) {
   const { toast } = useToast();
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [specialty, setSpecialty] = useState<string>("all");
@@ -144,6 +148,14 @@ export function DoctorSearch() {
                     {doctor.hasArrived && (
                       <p className="text-xs text-green-600 mt-1">Doctor has arrived</p>
                     )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => onDoctorSelect?.(doctor.id)}
+                    >
+                      Book Appointment
+                    </Button>
                   </div>
                 </div>
               </CardContent>
