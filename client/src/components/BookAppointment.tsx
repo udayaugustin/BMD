@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { format } from "date-fns";
+import { format, addDays, setHours, setMinutes } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -26,6 +26,8 @@ type ConsultingHours = {
 export function BookAppointment({ doctorId }: { doctorId: number }) {
   const { toast } = useToast();
   const [selectedClinicId, setSelectedClinicId] = useState<number | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
 
   // Get doctor's clinics
   const { data: clinics, isLoading: isLoadingClinics } = useQuery<DoctorClinic[]>({
@@ -40,15 +42,13 @@ export function BookAppointment({ doctorId }: { doctorId: number }) {
 
   // Book appointment mutation
   const bookAppointmentMutation = useMutation({
-    mutationFn: async (doctorClinicId: number) => {
-      // Get next token number based on current token
-      const currentClinic = clinics?.find(c => c.id === doctorClinicId);
+    mutationFn: async (data: { doctorClinicId: number; appointmentTime: Date }) => {
+      const currentClinic = clinics?.find(c => c.id === data.doctorClinicId);
       const nextToken = (currentClinic?.currentToken || 0) + 1;
 
-      const appointmentTime = new Date();
       const res = await apiRequest("POST", "/api/appointments", {
-        doctorClinicId,
-        appointmentTime: appointmentTime.toISOString(), // Properly format date
+        doctorClinicId: data.doctorClinicId,
+        appointmentTime: data.appointmentTime.toISOString(),
         tokenNumber: nextToken,
       });
       return await res.json();
@@ -56,9 +56,11 @@ export function BookAppointment({ doctorId }: { doctorId: number }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
       toast({
-        title: "Appointment Booked",
+        title: "Success",
         description: "Your appointment has been scheduled successfully.",
       });
+      setSelectedDate(null);
+      setSelectedTimeSlot(null);
     },
     onError: (error: Error) => {
       toast({
@@ -93,6 +95,19 @@ export function BookAppointment({ doctorId }: { doctorId: number }) {
 
   const formatTime = (time: string) => {
     return format(new Date(`2000-01-01T${time}`), 'hh:mm a');
+  };
+
+  const handleBooking = (hours: ConsultingHours) => {
+    if (!selectedClinicId) return;
+
+    // Create appointment time by combining selected date with consulting hours start time
+    const [hour, minute] = hours.startTime.split(':').map(Number);
+    const appointmentTime = setMinutes(setHours(new Date(), hour), minute);
+
+    bookAppointmentMutation.mutate({
+      doctorClinicId: selectedClinicId,
+      appointmentTime,
+    });
   };
 
   return (
@@ -157,7 +172,7 @@ export function BookAppointment({ doctorId }: { doctorId: number }) {
                     </p>
                     <Button
                       className="mt-2"
-                      onClick={() => bookAppointmentMutation.mutate(selectedClinicId)}
+                      onClick={() => handleBooking(hours)}
                       disabled={bookAppointmentMutation.isPending}
                     >
                       {bookAppointmentMutation.isPending ? (
