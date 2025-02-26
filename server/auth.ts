@@ -4,6 +4,7 @@ import { Express } from "express";
 import session from "express-session";
 import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
+import { log } from "./vite";
 
 declare global {
   namespace Express {
@@ -47,15 +48,24 @@ export function setupAuth(app: Express) {
     )
   );
 
+  // Serialize just the mobile number to the session
   passport.serializeUser((user, done) => {
-    done(null, user.id);
+    log(`Serializing user: ${user.mobileNumber}`);
+    done(null, user.mobileNumber);
   });
 
-  passport.deserializeUser(async (id: number, done) => {
+  // Deserialize by finding user with the stored mobile number
+  passport.deserializeUser(async (mobileNumber: string, done) => {
     try {
-      const user = await storage.getUserByMobileNumber(id.toString());
+      log(`Deserializing user: ${mobileNumber}`);
+      const user = await storage.getUserByMobileNumber(mobileNumber);
+      if (!user) {
+        log(`User not found for mobile number: ${mobileNumber}`);
+        return done(null, false);
+      }
       done(null, user);
     } catch (error) {
+      log(`Error deserializing user: ${error}`);
       done(error);
     }
   });
@@ -68,36 +78,46 @@ export function setupAuth(app: Express) {
       }
 
       const user = await storage.createUser(req.body);
+      log(`User registered: ${user.mobileNumber}`);
+
       req.login(user, (err) => {
         if (err) {
+          log(`Login error after registration: ${err}`);
           return res.status(500).json({ message: "Failed to login after registration" });
         }
         res.status(201).json(user);
       });
     } catch (error) {
+      log(`Registration error: ${error}`);
       res.status(500).json({ message: "Failed to register user" });
     }
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) {
+        log(`Login error: ${err}`);
         return next(err);
       }
       if (!user) {
-        return res.status(401).json({ message: info.message || "Authentication failed" });
+        log(`Login failed: ${info?.message || 'Authentication failed'}`);
+        return res.status(401).json({ message: info?.message || "Authentication failed" });
       }
       req.login(user, (err) => {
         if (err) {
+          log(`Login session error: ${err}`);
           return next(err);
         }
+        log(`User logged in: ${user.mobileNumber}`);
         return res.json(user);
       });
     })(req, res, next);
   });
 
   app.post("/api/logout", (req, res) => {
+    const mobileNumber = req.user?.mobileNumber;
     req.logout(() => {
+      log(`User logged out: ${mobileNumber}`);
       res.sendStatus(200);
     });
   });
