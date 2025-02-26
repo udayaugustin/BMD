@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { format, addDays, setHours, setMinutes } from "date-fns";
+import { format, addDays, setHours, setMinutes, parseISO } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type DoctorClinic = {
   id: number;
@@ -26,7 +27,7 @@ type ConsultingHours = {
 export function BookAppointment({ doctorId }: { doctorId: number }) {
   const { toast } = useToast();
   const [selectedClinicId, setSelectedClinicId] = useState<number | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
 
   // Get doctor's clinics
@@ -40,16 +41,36 @@ export function BookAppointment({ doctorId }: { doctorId: number }) {
     enabled: !!selectedClinicId,
   });
 
+  // Generate time slots based on consulting hours
+  const getTimeSlots = (hours: ConsultingHours) => {
+    const slots: string[] = [];
+    const start = parseISO(`2000-01-01T${hours.startTime}`);
+    const end = parseISO(`2000-01-01T${hours.endTime}`);
+
+    let current = start;
+    while (current <= end) {
+      slots.push(format(current, 'HH:mm'));
+      current = addDays(current, 0);
+      current.setMinutes(current.getMinutes() + 30); // 30-minute slots
+    }
+    return slots;
+  };
+
   // Book appointment mutation
   const bookAppointmentMutation = useMutation({
-    mutationFn: async (data: { doctorClinicId: number; appointmentTime: Date }) => {
-      const currentClinic = clinics?.find(c => c.id === data.doctorClinicId);
-      const nextToken = (currentClinic?.currentToken || 0) + 1;
+    mutationFn: async () => {
+      if (!selectedTimeSlot || !selectedClinicId) {
+        throw new Error("Please select a time slot");
+      }
+
+      // Create appointment time by combining selected date and time
+      const [hours, minutes] = selectedTimeSlot.split(':').map(Number);
+      const appointmentTime = new Date(selectedDate);
+      appointmentTime.setHours(hours, minutes, 0);
 
       const res = await apiRequest("POST", "/api/appointments", {
-        doctorClinicId: data.doctorClinicId,
-        appointmentTime: data.appointmentTime.toISOString(),
-        tokenNumber: nextToken,
+        doctorClinicId: selectedClinicId,
+        appointmentTime: appointmentTime.toISOString(),
       });
       return await res.json();
     },
@@ -59,7 +80,6 @@ export function BookAppointment({ doctorId }: { doctorId: number }) {
         title: "Success",
         description: "Your appointment has been scheduled successfully.",
       });
-      setSelectedDate(null);
       setSelectedTimeSlot(null);
     },
     onError: (error: Error) => {
@@ -94,20 +114,7 @@ export function BookAppointment({ doctorId }: { doctorId: number }) {
   };
 
   const formatTime = (time: string) => {
-    return format(new Date(`2000-01-01T${time}`), 'hh:mm a');
-  };
-
-  const handleBooking = (hours: ConsultingHours) => {
-    if (!selectedClinicId) return;
-
-    // Create appointment time by combining selected date with consulting hours start time
-    const [hour, minute] = hours.startTime.split(':').map(Number);
-    const appointmentTime = setMinutes(setHours(new Date(), hour), minute);
-
-    bookAppointmentMutation.mutate({
-      doctorClinicId: selectedClinicId,
-      appointmentTime,
-    });
+    return format(parseISO(`2000-01-01T${time}`), 'hh:mm a');
   };
 
   return (
@@ -151,41 +158,40 @@ export function BookAppointment({ doctorId }: { doctorId: number }) {
         </div>
       )}
 
-      {selectedClinicId && (
+      {selectedClinicId && consultingHours?.length && (
         <Card>
           <CardContent className="p-4">
             <h3 className="text-lg font-medium mb-4">Available Time Slots</h3>
-            {isLoadingHours ? (
-              <div className="flex justify-center p-4">
-                <Loader2 className="h-6 w-6 animate-spin" />
+            {consultingHours.map((hours) => (
+              <div key={hours.id} className="border rounded-lg p-4 mb-4">
+                <p className="font-medium">{getDayName(hours.dayOfWeek)}</p>
+                <p className="text-sm text-muted-foreground mb-2">
+                  {formatTime(hours.startTime)} - {formatTime(hours.endTime)}
+                </p>
+                <Select value={selectedTimeSlot || ''} onValueChange={setSelectedTimeSlot}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select time slot" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getTimeSlots(hours).map((slot) => (
+                      <SelectItem key={slot} value={slot}>
+                        {format(parseISO(`2000-01-01T${slot}`), 'hh:mm a')}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  className="mt-4"
+                  onClick={() => bookAppointmentMutation.mutate()}
+                  disabled={!selectedTimeSlot || bookAppointmentMutation.isPending}
+                >
+                  {bookAppointmentMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
+                  Book Appointment
+                </Button>
               </div>
-            ) : consultingHours?.length ? (
-              <div className="space-y-4">
-                {consultingHours.map((hours) => (
-                  <div key={hours.id} className="border rounded-lg p-4">
-                    <p className="font-medium">{getDayName(hours.dayOfWeek)}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatTime(hours.startTime)} - {formatTime(hours.endTime)}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Maximum patients: {hours.maxPatients}
-                    </p>
-                    <Button
-                      className="mt-2"
-                      onClick={() => handleBooking(hours)}
-                      disabled={bookAppointmentMutation.isPending}
-                    >
-                      {bookAppointmentMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : null}
-                      Book Appointment
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground">No consulting hours available.</p>
-            )}
+            ))}
           </CardContent>
         </Card>
       )}
