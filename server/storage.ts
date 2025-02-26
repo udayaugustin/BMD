@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
+import { sql } from 'drizzle-orm';
 
 const PostgresSessionStore = connectPg(session);
 
@@ -148,10 +149,76 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAppointment(appointment: Omit<Appointment, "id">) {
+    // First check if the doctor_clinic exists and is available
+    const [doctorClinic] = await db
+      .select()
+      .from(doctorClinics)
+      .where(eq(doctorClinics.id, appointment.doctorClinicId));
+
+    if (!doctorClinic) {
+      throw new Error("Doctor not found at this clinic");
+    }
+
+    if (!doctorClinic.isAvailable) {
+      throw new Error("Doctor is not available for appointments");
+    }
+
+    // Check if the time slot is within consulting hours
+    const appointmentDate = new Date(appointment.appointmentTime);
+    const dayOfWeek = appointmentDate.getDay();
+
+    const [consultingHour] = await db
+      .select()
+      .from(consultingHours)
+      .where(and(
+        eq(consultingHours.doctorClinicId, appointment.doctorClinicId),
+        eq(consultingHours.dayOfWeek, dayOfWeek)
+      ));
+
+    if (!consultingHour) {
+      throw new Error("Doctor is not available on this day");
+    }
+
+    // Check if the appointment time is within consulting hours
+    const appointmentTimeOnly = appointment.appointmentTime.split('T')[1].substring(0, 5);
+    if (appointmentTimeOnly < consultingHour.startTime || appointmentTimeOnly > consultingHour.endTime) {
+      throw new Error("Appointment time is outside consulting hours");
+    }
+
+    // Check if we haven't exceeded max patients for the day
+    const existingAppointments = await db
+      .select()
+      .from(appointments)
+      .where(and(
+        eq(appointments.doctorClinicId, appointment.doctorClinicId),
+        eq(appointments.appointmentTime, appointment.appointmentTime)
+      ));
+
+    if (existingAppointments.length >= consultingHour.maxPatients) {
+      throw new Error("No more appointments available for this time slot");
+    }
+
+    // Generate token number (current max token + 1)
+    const [maxToken] = await db
+      .select({ max: sql<number>`MAX(token_number)` })
+      .from(appointments)
+      .where(and(
+        eq(appointments.doctorClinicId, appointment.doctorClinicId),
+        eq(appointments.appointmentTime, appointment.appointmentTime)
+      ));
+
+    const tokenNumber = (maxToken?.max || 0) + 1;
+
+    // Create the appointment with the generated token
     const [newAppointment] = await db
       .insert(appointments)
-      .values(appointment)
+      .values({
+        ...appointment,
+        tokenNumber,
+        status: "scheduled"
+      })
       .returning();
+
     return newAppointment;
   }
 
@@ -187,11 +254,11 @@ export class DatabaseStorage implements IStorage {
       .map(({ doctor, clinic, doctorClinic }) => {
         const distance = params.latitude && params.longitude
           ? calculateDistance(
-              params.latitude,
-              params.longitude,
-              Number(clinic.latitude),
-              Number(clinic.longitude)
-            )
+            params.latitude,
+            params.longitude,
+            Number(clinic.latitude),
+            Number(clinic.longitude)
+          )
           : 0;
 
         return {
