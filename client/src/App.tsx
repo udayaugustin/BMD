@@ -7,15 +7,19 @@ import Home from "@/pages/home";
 import BookAppointment from "@/pages/book-appointment";
 import AuthPage from "@/pages/auth";
 import { ProtectedRoute } from "./lib/protected-route";
+import Navbar from "@/components/navbar";
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/auth" component={AuthPage} />
-      <ProtectedRoute path="/" component={Home} />
-      <ProtectedRoute path="/book/:id" component={BookAppointment} />
-      <Route component={NotFound} />
-    </Switch>
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      <Switch>
+        <Route path="/auth" component={AuthPage} />
+        <ProtectedRoute path="/" component={Home} />
+        <ProtectedRoute path="/book/:id" component={BookAppointment} />
+        <Route component={NotFound} />
+      </Switch>
+    </div>
   );
 }
 
