@@ -7,6 +7,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
 
   // Doctors routes
+  app.get("/api/doctors/search", async (req, res) => {
+    const { latitude, longitude, maxDistance, specialty } = req.query;
+
+    const doctors = await storage.searchDoctors({
+      latitude: latitude ? Number(latitude) : undefined,
+      longitude: longitude ? Number(longitude) : undefined,
+      maxDistance: maxDistance ? Number(maxDistance) : undefined,
+      specialty: specialty?.toString(),
+    });
+
+    res.json(doctors);
+  });
+
   app.get("/api/doctors", async (req, res) => {
     const clinicId = req.query.clinicId ? Number(req.query.clinicId) : undefined;
     const doctors = await storage.getDoctors(clinicId);
@@ -30,14 +43,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Appointments routes
   app.get("/api/appointments", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+
     const appointments = await storage.getAppointments(req.user.id);
     res.json(appointments);
   });
 
   app.post("/api/appointments", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+
     const appointment = await storage.createAppointment({
       ...req.body,
       patientId: req.user.id,

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -17,6 +17,8 @@ export const clinics = pgTable("clinics", {
   address: text("address").notNull(),
   phone: text("phone").notNull(),
   specialties: text("specialties").array().notNull(),
+  latitude: numeric("latitude").notNull(),
+  longitude: numeric("longitude").notNull(),
 });
 
 export const doctors = pgTable("doctors", {

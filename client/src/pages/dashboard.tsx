@@ -3,10 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Doctor, Appointment } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
+import { DoctorSearch } from "@/components/DoctorSearch";
+import { useState } from "react";
 
 export default function Dashboard() {
   const { user, logoutMutation } = useAuth();
+  const [showSearch, setShowSearch] = useState(false);
 
   const { data: appointments, isLoading: isLoadingAppointments } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
@@ -43,6 +46,27 @@ export default function Dashboard() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <Button
+            onClick={() => setShowSearch(!showSearch)}
+            className="w-full md:w-auto"
+          >
+            <Search className="w-4 h-4 mr-2" />
+            {showSearch ? "Hide Search" : "Find Nearby Doctors"}
+          </Button>
+
+          {showSearch && (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle>Search Doctors</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DoctorSearch />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
           <Card>
             <CardHeader>
