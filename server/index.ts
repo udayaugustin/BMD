@@ -57,7 +57,7 @@ app.use((req, res, next) => {
   }
 
   // Allow port configuration via environment variable
-  const port = process.env.PORT || 5000;
+  const port = process.env.PORT || 5001;
   server.listen({
     port,
     host: "0.0.0.0",
